@@ -1,5 +1,5 @@
 /* Offline shell for Sofia Bennett Only. Bump CACHE to ship an update. */
-const CACHE = 'sofia-bennett-only-v1';
+const CACHE = 'sofia-bennett-only-v2';
 const SHELL = [
   './',
   './index.html',
