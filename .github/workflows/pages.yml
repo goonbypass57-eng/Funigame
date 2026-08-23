@@ -24,8 +24,11 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      # enablement lets the workflow turn Pages on itself the first time,
-      # instead of failing until someone flips it in repo settings
+      # enablement lets the workflow turn Pages on itself where the Actions
+      # token has admin rights. Where it does not, creating the Pages site
+      # returns "Resource not accessible by integration" and Pages has to be
+      # switched on once by hand: Settings -> Pages -> Source: GitHub Actions.
+      # Every push deploys after that; this step then just reads the config.
       - uses: actions/configure-pages@v5
         with:
           enablement: true

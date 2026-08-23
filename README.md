@@ -60,10 +60,20 @@ It ships as a PWA — manifest, icons, and a service worker that caches the whol
 Open it in mobile Safari or Chrome and choose **Add to Home Screen**. After the first
 load it runs fullscreen and completely offline, on a plane, in a basement, anywhere.
 
-### Deploy it
+### Deploy it — this is the link you can actually send people
 
-`.github/workflows/pages.yml` publishes the repo root to GitHub Pages. Enable it under
-**Settings → Pages → Source: GitHub Actions**, and every push deploys.
+`.github/workflows/pages.yml` publishes the repo root to GitHub Pages, which gives you
+an ordinary public URL anyone can tap:
+
+```
+https://goonbypass57-eng.github.io/Funigame/
+```
+
+**Pages has to be switched on once by hand** — Settings → Pages → Source: **GitHub
+Actions**. The workflow cannot do this for you: `GITHUB_TOKEN` can *deploy* to Pages
+but not *create* the Pages site, so the first run fails with "Resource not accessible
+by integration" until a repo admin flips that setting. After that, every push deploys
+and the URL keeps working.
 
 ### One file, no server
 
