@@ -65,6 +65,20 @@ load it runs fullscreen and completely offline, on a plane, in a basement, anywh
 `.github/workflows/pages.yml` publishes the repo root to GitHub Pages. Enable it under
 **Settings → Pages → Source: GitHub Actions**, and every push deploys.
 
+### One file, no server
+
+If you just want something you can email, drop on a USB stick, or open by
+double-clicking:
+
+```bash
+node tools/build-standalone.js
+```
+
+That inlines the CSS, the content pack, and the game into a single ~48 KB
+`dist/sofia-bennett-only.html` with no external references at all. It works from
+`file://`, offline, forever. (`--artifact` emits the same thing as a body fragment,
+for hosts that supply their own page skeleton.)
+
 ## Project layout
 
 ```
@@ -76,6 +90,7 @@ js/game.js               game loop, scoring, waves, swipe input, the diff highli
 sw.js                    offline cache
 manifest.webmanifest     PWA install metadata
 icons/                   generated app icons
+tools/build-standalone.js  inlines everything into one portable HTML file
 ```
 
 ## Make it about someone else
