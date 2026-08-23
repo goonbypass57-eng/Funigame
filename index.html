@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sofia Bennett Only</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1">
+<meta name="description" content="You are the bouncer. The guest list has exactly one name on it: Sofia Bennett. Judge the name tag. Only the name tag.">
+<meta name="theme-color" content="#12071f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sofia Bennett">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ============ TITLE ============ -->
+<section class="screen on" id="screen-title">
+  <div class="rope" aria-hidden="true"></div>
+  <div class="menu">
+    <p class="kicker">one name on tonight&rsquo;s list</p>
+    <h1 class="logo"><span>SOFIA</span><span>BENNETT</span><em>only</em></h1>
+    <p class="tag-sub">a door policy simulator</p>
+    <button class="btn big" id="btn-play">START YOUR SHIFT</button>
+    <button class="btn ghost" id="btn-how">HOW TO WORK THE DOOR</button>
+    <p class="best" id="best-title"></p>
+  </div>
+  <button class="mute" id="mute" aria-label="Mute">&#128266;</button>
+</section>
+
+<!-- ============ HOW TO PLAY ============ -->
+<section class="screen" id="screen-how">
+  <div class="menu how">
+    <h2>THE JOB</h2>
+    <ol class="rules">
+      <li><b>One name is on the list.</b> <span class="truth js-truename">Sofia Bennett</span></li>
+      <li><b>Judge the NAME TAG.</b> Not the face. Not the vibe.</li>
+      <li>Tag reads <i>exactly</i> that? <span class="pill in">LET IN &rarr;</span></li>
+      <li>One letter off? One word extra? <span class="pill out">&larr; BOUNCE</span></li>
+    </ol>
+    <p class="fine">Swipe the guest, or thump the big buttons. Three mistakes and your shift is over. And yes &mdash; if the raccoon&rsquo;s tag is right, the raccoon gets in.</p>
+    <button class="btn big" id="btn-how-go">OPEN THE DOORS</button>
+    <button class="btn ghost" id="btn-how-back">BACK</button>
+  </div>
+</section>
+
+<!-- ============ GAME ============ -->
+<section class="screen" id="screen-game">
+  <header class="hud">
+    <div class="hud-left">
+      <div class="score" id="score">0</div>
+      <div class="wave" id="wave">WAVE 1</div>
+    </div>
+    <div class="hud-right">
+      <div class="strikes" id="strikes"></div>
+      <button class="quit" id="btn-quit" aria-label="Quit shift">&times;</button>
+    </div>
+  </header>
+
+  <div class="list-strip">
+    <span>ON THE LIST</span><b id="true-name">Sofia Bennett</b>
+  </div>
+
+  <div class="fuse-track"><div class="fuse" id="fuse"></div></div>
+
+  <main class="stage" id="stage">
+    <div class="combo" id="combo"></div>
+    <div class="pops" id="pops"></div>
+
+    <div class="card" id="card">
+      <div class="stamp in"  id="stamp-in">IN</div>
+      <div class="stamp out" id="stamp-out">OUT</div>
+      <div class="face" id="face">&#129437;</div>
+      <div class="nametag">
+        <div class="nametag-top">HELLO<small>my name is</small></div>
+        <div class="nametag-body"><span id="tagname">Sofia Bennett</span></div>
+      </div>
+      <p class="flavour" id="flavour"></p>
+    </div>
+
+    <div class="banner" id="banner"></div>
+
+    <div class="verdict" id="verdict">
+      <div class="verdict-box">
+        <h3 id="v-title">IMPOSTOR</h3>
+        <div class="v-tag" id="v-tag"></div>
+        <div class="v-vs">should have read</div>
+        <div class="v-true js-truename">Sofia Bennett</div>
+        <p id="v-note"></p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="controls">
+    <button class="act out" id="btn-out"><b>BOUNCE</b><small>not her</small></button>
+    <button class="act in"  id="btn-in"><b>LET IN</b><small>that&rsquo;s her</small></button>
+  </footer>
+</section>
+
+<!-- ============ SHIFT REPORT ============ -->
+<section class="screen" id="screen-over">
+  <div class="menu report">
+    <p class="kicker">shift report</p>
+    <div class="final" id="o-score">0</div>
+    <div class="newbest" id="o-new">NEW PERSONAL BEST</div>
+    <h2 class="rank" id="o-rank"></h2>
+    <p class="quip" id="o-quip"></p>
+    <div class="stats" id="o-stats"></div>
+    <button class="btn big" id="btn-again">BACK ON THE DOOR</button>
+    <button class="btn ghost" id="btn-menu">MAIN MENU</button>
+  </div>
+</section>
+
+<script src="js/names.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
