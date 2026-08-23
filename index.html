@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+<div class="lights" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
 
 <!-- ============ TITLE ============ -->
 <section class="screen on" id="screen-title">
@@ -36,12 +37,12 @@
   <div class="menu how">
     <h2>THE JOB</h2>
     <ol class="rules">
-      <li><b>One name is on the list.</b> <span class="truth js-truename">Sofia Bennett</span></li>
-      <li><b>Judge the NAME TAG.</b> Not the face. Not the vibe.</li>
-      <li>Tag reads <i>exactly</i> that? <span class="pill in">LET IN &rarr;</span></li>
+      <li><b>Level 1 has one name on the list.</b> <span class="truth js-firstname">Sofia Bennett</span></li>
+      <li><b>Every level adds another name.</b> Eight by the end &mdash; and they get stranger.</li>
+      <li>Tag matches <i>any</i> name on the list, exactly? <span class="pill in">LET IN &rarr;</span></li>
       <li>One letter off? One word extra? <span class="pill out">&larr; BOUNCE</span></li>
     </ol>
-    <p class="fine">Swipe the guest, or thump the big buttons. Three mistakes and your shift is over. And yes &mdash; if the raccoon&rsquo;s tag is right, the raccoon gets in.</p>
+    <p class="fine">Judge the <b>name tag</b>, never the face. Swipe the guest or thump the big buttons. Three mistakes ends your shift. And yes &mdash; if the raccoon&rsquo;s tag is on the list, the raccoon gets in.</p>
     <button class="btn big" id="btn-how-go">OPEN THE DOORS</button>
     <button class="btn ghost" id="btn-how-back">BACK</button>
   </div>
@@ -52,7 +53,7 @@
   <header class="hud">
     <div class="hud-left">
       <div class="score" id="score">0</div>
-      <div class="wave" id="wave">WAVE 1</div>
+      <div class="level" id="level">LEVEL 1</div>
     </div>
     <div class="hud-right">
       <div class="strikes" id="strikes"></div>
@@ -60,9 +61,10 @@
     </div>
   </header>
 
-  <div class="list-strip">
-    <span>ON THE LIST</span><b id="true-name">Sofia Bennett</b>
-  </div>
+  <section class="list-panel" id="list-panel" aria-label="Tonight&rsquo;s guest list">
+    <header><span>TONIGHT&rsquo;S LIST</span><em id="list-count">1 NAME</em></header>
+    <ul class="list-names" id="list-names"></ul>
+  </section>
 
   <div class="fuse-track"><div class="fuse" id="fuse"></div></div>
 
@@ -87,16 +89,16 @@
       <div class="verdict-box">
         <h3 id="v-title">IMPOSTOR</h3>
         <div class="v-tag" id="v-tag"></div>
-        <div class="v-vs">should have read</div>
-        <div class="v-true js-truename">Sofia Bennett</div>
+        <div class="v-vs">the list says</div>
+        <div class="v-true" id="v-true">Sofia Bennett</div>
         <p id="v-note"></p>
       </div>
     </div>
   </main>
 
   <footer class="controls">
-    <button class="act out" id="btn-out"><b>BOUNCE</b><small>not her</small></button>
-    <button class="act in"  id="btn-in"><b>LET IN</b><small>that&rsquo;s her</small></button>
+    <button class="act out" id="btn-out"><b>BOUNCE</b><small>not on the list</small></button>
+    <button class="act in"  id="btn-in"><b>LET IN</b><small>on the list</small></button>
   </footer>
 </section>
 

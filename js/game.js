@@ -1,13 +1,12 @@
 /* ============================================================
    SOFIA BENNETT ONLY
-   You are the door. The list has one name on it. Good luck.
+   You are the door. The list starts with one name and grows.
    ============================================================ */
 (function () {
   'use strict';
 
   const C = window.SB_CONTENT;
   const SFX = window.SB_SFX;
-  const TRUE_NAME = C.TRUE_NAME;
 
   /* ---------- tiny helpers ---------- */
   const $ = (id) => document.getElementById(id);
@@ -16,54 +15,65 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
+  const shuffle = (a) => {
+    const r = a.slice();
+    for (let i = r.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [r[i], r[j]] = [r[j], r[i]];
+    }
+    return r;
+  };
 
   const REDUCED = window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ---------- persistence ---------- */
-  const KEY = 'sofia-bennett-only.v1';
+  const KEY = 'sofia-bennett-only.v2';
+  const BLANK = { best: 0, bestStreak: 0, bestLevel: 1, admitted: 0, bounced: 0,
+                  shifts: 0, muted: false, seenHow: false };
   function loadSave() {
-    try {
-      return Object.assign(
-        { best: 0, bestStreak: 0, admitted: 0, bounced: 0, shifts: 0, muted: false, seenHow: false },
-        JSON.parse(localStorage.getItem(KEY) || '{}')
-      );
-    } catch (e) {
-      return { best: 0, bestStreak: 0, admitted: 0, bounced: 0, shifts: 0, muted: false, seenHow: false };
-    }
+    try { return Object.assign({}, BLANK, JSON.parse(localStorage.getItem(KEY) || '{}')); }
+    catch (e) { return Object.assign({}, BLANK); }
   }
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) {} }
   const save = loadSave();
 
   /* ---------- game state ---------- */
   const S = {
-    running: false,
-    frozen: false,
-    locked: false,
-    score: 0,
-    combo: 0,
-    bestCombo: 0,
-    strikes: 0,
-    seen: 0,
-    admitted: 0,
-    bounced: 0,
-    realTurnedAway: 0,
-    impostorsLetIn: 0,
-    wave: 1,
-    guest: null,
-    lastName: '',
-    roundMs: 5000,
-    endsAt: 0,
-    raf: 0
+    running: false, frozen: false, locked: false,
+    score: 0, combo: 0, bestCombo: 0, strikes: 0, seen: 0,
+    admitted: 0, bounced: 0, realTurnedAway: 0, impostorsLetIn: 0,
+    level: 1, list: [], familyQueue: [], wildQueue: [],
+    guest: null, lastTag: '', roundMs: 5200, endsAt: 0, raf: 0, pausedLeft: null
   };
   const MAX_STRIKES = 3;
+  const PER_LEVEL = 6;          // guests judged before the list grows
 
   /* ---------- difficulty ---------- */
-  function waveFor(seen) { return Math.floor(seen / 8) + 1; }
-  function roundMsFor(wave) { return Math.max(1550, 5000 - (wave - 1) * 330); }
+  function levelFor(seen) { return Math.floor(seen / PER_LEVEL) + 1; }
 
-  const recentNames = [];
-  const recentFaces = [];
+  // More names to scan buys you time; deep levels take it back again.
+  function roundMsFor(level, names) {
+    return Math.max(2100, 5200 + 280 * (names - 1) - (level - 1) * 260);
+  }
+
+  // Which tier of impostor this level deals in.
+  function tierFor(level) {
+    const r = Math.random();
+    if (level <= 2) return r < 0.80 ? 1 : 2;
+    if (level <= 4) return r < 0.35 ? 1 : (r < 0.85 ? 2 : 3);
+    if (level <= 6) return r < 0.15 ? 1 : (r < 0.60 ? 2 : 3);
+    return r < 0.08 ? 1 : (r < 0.38 ? 2 : 3);
+  }
+
+  /* The name this level adds to the list: family first, then the strangers. */
+  function nameToAdd() {
+    if (S.familyQueue.length) return S.familyQueue.shift();
+    if (S.wildQueue.length) return S.wildQueue.shift();
+    return null;
+  }
+
+  const recentTags = [], recentFaces = [];
   function fresh(pool, memory, depth) {
     let choices = pool;
     if (memory.length) {
@@ -76,34 +86,51 @@
     return pick;
   }
 
-  function pickImpostor(wave) {
-    // Early waves are gentle. Later ones are personal.
-    const r = Math.random();
-    let pool;
-    if (wave <= 2)      pool = r < 0.80 ? C.TIER1 : C.TIER2;
-    else if (wave <= 4) pool = r < 0.35 ? C.TIER1 : (r < 0.85 ? C.TIER2 : C.TIER3);
-    else if (wave <= 6) pool = r < 0.15 ? C.TIER1 : (r < 0.60 ? C.TIER2 : C.TIER3);
-    else                pool = r < 0.08 ? C.TIER1 : (r < 0.38 ? C.TIER2 : C.TIER3);
-    return fresh(pool, recentNames, 14);
-  }
-
   function nextGuest() {
-    const wave = S.wave;
-    let name, valid;
-    // Keep it near a coin flip so guessing never pays.
-    for (let i = 0; i < 12; i++) {
-      valid = Math.random() < 0.47;
-      name = valid ? TRUE_NAME : pickImpostor(wave);
-      if (name !== S.lastName || valid) break;
+    // Decide validity ONCE. Re-rolling it inside the anti-repeat loop skews the
+    // mix: a short list has few valid names to rotate through, so every repeat
+    // used to flip the coin again.
+    const valid = Math.random() < 0.47;
+    let name;
+    if (valid) {
+      name = rand(S.list);
+    } else {
+      for (let i = 0; i < 10; i++) {
+        name = C.makeImpostor(rand(S.list), S.list, tierFor(S.level));
+        if (name !== S.lastTag) break;
+      }
     }
-    S.lastName = name;
+    S.lastTag = name;
     const [face, flavour] = fresh(C.GUESTS, recentFaces, 9);
-    // A gold tag is still just a tag. Same rule. Free upside.
-    const golden = valid && wave >= 2 && Math.random() < 0.09;
+    const golden = valid && S.level >= 2 && Math.random() < 0.09;
     return { name, valid, face, flavour, golden };
   }
 
-  /* ---------- character-level diff, for the teaching moment ---------- */
+  /* ---------- which listed name were they *trying* to be ---------- */
+  function lev(a, b) {
+    const A = Array.from(a), B = Array.from(b);
+    let prev = new Array(B.length + 1);
+    for (let j = 0; j <= B.length; j++) prev[j] = j;
+    for (let i = 1; i <= A.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= B.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1,
+                          prev[j - 1] + (A[i - 1] === B[j - 1] ? 0 : 1));
+      }
+      prev = cur;
+    }
+    return prev[B.length];
+  }
+  function nearest(name) {
+    let best = S.list[0], bestD = Infinity;
+    for (const n of S.list) {
+      const d = lev(name.toLowerCase(), n.toLowerCase());
+      if (d < bestD) { bestD = d; best = n; }
+    }
+    return best;
+  }
+
+  /* ---------- character diff, for the teaching moment ---------- */
   function diffMarkup(wrong, right) {
     const a = Array.from(wrong), b = Array.from(right);
     let p = 0;
@@ -111,59 +138,61 @@
     let s = 0;
     while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
     let from = p, to = a.length - s;
-    if (from >= to) { // pure deletion — mark the seam so the eye lands there
-      from = clamp(p - 1, 0, a.length - 1);
+    if (from >= to) {
+      from = clamp(p - 1, 0, Math.max(0, a.length - 1));
       to = clamp(p + 1, from + 1, a.length);
     }
     return esc(a.slice(0, from).join('')) +
-           '<mark>' + esc(a.slice(from, to).join('') || ' ') + '</mark>' +
+           '<mark>' + esc(a.slice(from, to).join('') || ' ') + '</mark>' +
            esc(a.slice(to).join(''));
   }
 
   /* ---------- DOM ---------- */
   const el = {
-    screens:   document.querySelectorAll('.screen'),
-    title:     $('screen-title'),
-    how:       $('screen-how'),
-    game:      $('screen-game'),
-    over:      $('screen-over'),
-    stage:     $('stage'),
-    card:      $('card'),
-    face:      $('face'),
-    tag:       $('tagname'),
-    flavour:   $('flavour'),
-    stampIn:   $('stamp-in'),
-    stampOut:  $('stamp-out'),
-    score:     $('score'),
-    combo:     $('combo'),
-    wave:      $('wave'),
-    strikes:   $('strikes'),
-    fuse:      $('fuse'),
-    pops:      $('pops'),
-    banner:    $('banner'),
-    verdict:   $('verdict'),
-    vTitle:    $('v-title'),
-    vTag:      $('v-tag'),
-    vNote:     $('v-note'),
-    btnIn:     $('btn-in'),
-    btnOut:    $('btn-out'),
-    bestTitle: $('best-title'),
-    mute:      $('mute'),
-    oScore:    $('o-score'),
-    oRank:     $('o-rank'),
-    oQuip:     $('o-quip'),
-    oStats:    $('o-stats'),
-    oNew:      $('o-new')
+    screens: document.querySelectorAll('.screen'),
+    title: $('screen-title'), how: $('screen-how'),
+    game: $('screen-game'), over: $('screen-over'),
+    stage: $('stage'), card: $('card'), face: $('face'), tag: $('tagname'),
+    flavour: $('flavour'), stampIn: $('stamp-in'), stampOut: $('stamp-out'),
+    score: $('score'), combo: $('combo'), level: $('level'), strikes: $('strikes'),
+    fuse: $('fuse'), pops: $('pops'), banner: $('banner'),
+    listPanel: $('list-panel'), listNames: $('list-names'), listCount: $('list-count'),
+    verdict: $('verdict'), vTitle: $('v-title'), vTag: $('v-tag'),
+    vTrue: $('v-true'), vNote: $('v-note'),
+    btnIn: $('btn-in'), btnOut: $('btn-out'),
+    bestTitle: $('best-title'), mute: $('mute'),
+    oScore: $('o-score'), oRank: $('o-rank'), oQuip: $('o-quip'),
+    oStats: $('o-stats'), oNew: $('o-new')
   };
 
-  function show(screen) {
-    el.screens.forEach((s) => s.classList.toggle('on', s === screen));
+  const show = (screen) => el.screens.forEach((s) => s.classList.toggle('on', s === screen));
+
+  /* ---------- the list panel ---------- */
+  let freshTimer = 0;
+  function renderList(freshName) {
+    el.listNames.innerHTML = S.list.map((n) =>
+      '<li class="chip' + (n === freshName ? ' fresh' : '') + '">' + esc(n) + '</li>'
+    ).join('');
+    el.listCount.textContent = S.list.length === 1 ? '1 NAME' : S.list.length + ' NAMES';
+    el.listPanel.classList.toggle('crowded', S.list.length >= 5);
+    // a long list steals height from the stage; tell the CSS so the guest
+    // card can give some back on short screens
+    document.body.classList.toggle('crowded', S.list.length >= 5);
+    if (freshName) {
+      el.listPanel.classList.remove('grew');
+      void el.listPanel.offsetWidth;
+      el.listPanel.classList.add('grew');
+      // the highlight is a reveal, not a permanent state
+      clearTimeout(freshTimer);
+      freshTimer = setTimeout(() => {
+        el.listNames.querySelectorAll('.chip.fresh').forEach((c) => c.classList.remove('fresh'));
+      }, 2200);
+    }
   }
 
-  /* ---------- HUD ---------- */
   function renderHud() {
     el.score.textContent = S.score.toLocaleString();
-    el.wave.textContent = 'WAVE ' + S.wave;
+    el.level.textContent = 'LEVEL ' + S.level;
     let dots = '';
     for (let i = 0; i < MAX_STRIKES; i++) {
       dots += '<i class="' + (i < MAX_STRIKES - S.strikes ? 'life' : 'life dead') + '"></i>';
@@ -185,11 +214,13 @@
     setTimeout(() => n.remove(), 900);
   }
 
-  function banner(text, sub) {
+  // hold=true gives the level-up name reveal a longer, readable beat of its own
+  function banner(text, sub, hold) {
     el.banner.innerHTML = '<b>' + esc(text) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '');
-    el.banner.classList.remove('on');
+    el.banner.classList.remove('on', 'hold');
     void el.banner.offsetWidth;
     el.banner.classList.add('on');
+    if (hold) el.banner.classList.add('hold');
   }
 
   /* ---------- round flow ---------- */
@@ -202,15 +233,15 @@
     el.tag.textContent = S.guest.name;
     el.tag.classList.toggle('long', Array.from(S.guest.name).length > 17);
     el.flavour.textContent = S.guest.flavour;
-    el.card.classList.toggle('golden', !!S.guest.golden);
 
     el.card.className = 'card' + (S.guest.golden ? ' golden' : '') + ' dealing';
     el.card.style.transform = '';
     el.card.style.opacity = '';
+    el.card.style.transition = '';
     el.stampIn.style.opacity = 0;
     el.stampOut.style.opacity = 0;
 
-    S.roundMs = roundMsFor(S.wave);
+    S.roundMs = roundMsFor(S.level, S.list.length);
     S.endsAt = performance.now() + S.roundMs;
     if (!S.raf) S.raf = requestAnimationFrame(tick);
   }
@@ -225,17 +256,11 @@
       el.fuse.style.transform = 'scaleX(' + frac + ')';
       el.fuse.classList.toggle('hot', frac < 0.3);
       if (frac < 0.3 && now - lastTickWarn > 260) { lastTickWarn = now; SFX.tick(); }
-      if (left <= 0 && !S.locked) { timeUp(); return; }
+      if (left <= 0 && !S.locked) { S.locked = true; resolve(null); return; }
     }
     S.raf = requestAnimationFrame(tick);
   }
 
-  function timeUp() {
-    S.locked = true;
-    resolve(null);
-  }
-
-  /* ---------- the judgement ---------- */
   function decide(letIn) {
     if (!S.running || S.locked || S.frozen) return;
     S.locked = true;
@@ -258,7 +283,8 @@
     if (right) {
       S.combo++;
       S.bestCombo = Math.max(S.bestCombo, S.combo);
-      let pts = Math.round((100 + 20 * Math.min(S.combo, 15)) * (1 + timeFrac));
+      // a longer list is a harder read, and pays like one
+      let pts = Math.round((100 + 20 * Math.min(S.combo, 15)) * (1 + timeFrac) * (1 + 0.12 * (S.list.length - 1)));
       if (g.golden) pts *= 3;
       S.score += pts;
       pop('+' + pts.toLocaleString(), g.golden ? 'gold' : 'good');
@@ -269,7 +295,9 @@
         SFX.good(S.combo);
       }
       buzz(12);
-      if (S.combo > 0 && S.combo % 10 === 0) banner('×' + S.combo + ' STREAK', rand(['the rope respects you', 'nobody is getting past you', 'flawless door work']));
+      if (S.combo > 0 && S.combo % 10 === 0) {
+        banner('×' + S.combo + ' STREAK', rand(['the rope respects you', 'nobody is getting past you', 'flawless door work']));
+      }
       flyOff(letIn, true);
       afterCorrect();
     } else {
@@ -278,28 +306,37 @@
       SFX.bad();
       buzz([40, 30, 60]);
       flyOff(timedOut ? null : letIn, false);
-      showVerdict(g, letIn, timedOut);
+      showVerdict(g, timedOut);
     }
     renderHud();
   }
 
   function afterCorrect() {
-    const nw = waveFor(S.seen);
+    const nl = levelFor(S.seen);
     const wait = REDUCED ? 120 : 260;
-    if (nw > S.wave) {
-      S.wave = nw;
+    if (nl > S.level) {
+      S.level = nl;
+      save.bestLevel = Math.max(save.bestLevel, S.level);
+      const added = nameToAdd();
+      if (added) {
+        S.list.push(added);
+        renderList(added);
+        SFX.wave();
+        banner('ADDED TO THE LIST', added, true);
+        setTimeout(deal, wait + (REDUCED ? 500 : 1750));
+        return;
+      }
       SFX.wave();
-      banner('WAVE ' + S.wave, rand([
-        'they are arriving faster',
-        'the spelling gets worse from here',
-        'management is watching',
-        'more tags. less time.',
-        'squint harder'
+      banner('LEVEL ' + S.level, rand([
+        'the list is full. now it gets fast.',
+        'no new names. less time.',
+        'same eight. half the clock.',
+        'management is watching'
       ]));
-      setTimeout(deal, wait + 380);
-    } else {
-      setTimeout(deal, wait);
+      setTimeout(deal, wait + 500);
+      return;
     }
+    setTimeout(deal, wait);
   }
 
   function flyOff(letIn, right) {
@@ -318,47 +355,41 @@
     setTimeout(() => el.stage.classList.remove('flash-good', 'flash-bad'), 220);
   }
 
-  function showVerdict(g, letIn, timedOut) {
+  const NOTES_REAL = ['They are telling everyone.', 'They had the receipts.',
+                      'That one is going in a review.', 'It was RIGHT THERE on the list.'];
+  const NOTES_FAKE = ['Not how it is spelled. Look.', 'Off by that much. Straight past you.',
+                      'They are already at the bar. Well done.', 'Check the list. Check it again.'];
+
+  function showVerdict(g, timedOut) {
     S.frozen = true;
     const dead = S.strikes >= MAX_STRIKES;
+    const target = g.valid ? g.name : nearest(g.name);
 
     if (timedOut) {
       el.vTitle.textContent = 'TOO SLOW';
       el.vNote.textContent = 'They wandered off. The queue is judging you.';
       el.vTag.innerHTML = esc(g.name);
     } else if (g.valid) {
-      el.vTitle.textContent = 'THAT WAS HER';
-      el.vNote.textContent = 'Spelled perfectly. You bounced her anyway. ' + rand(BAD_NOTES_REAL);
+      el.vTitle.textContent = 'ON THE LIST';
+      el.vNote.textContent = 'Spelled perfectly. You bounced them anyway. ' + rand(NOTES_REAL);
       el.vTag.innerHTML = esc(g.name);
     } else {
       el.vTitle.textContent = 'IMPOSTOR';
-      el.vNote.textContent = rand(BAD_NOTES_FAKE);
-      el.vTag.innerHTML = diffMarkup(g.name, TRUE_NAME);
+      el.vNote.textContent = rand(NOTES_FAKE);
+      el.vTag.innerHTML = diffMarkup(g.name, target);
     }
+    el.vTrue.textContent = target;
+    el.verdict.classList.toggle('good-catch', g.valid && !timedOut);
     el.verdict.classList.add('on');
 
     const go = () => {
       el.verdict.classList.remove('on');
-      el.verdict.removeEventListener('pointerdown', go);
       clearTimeout(vTimer);
       if (dead) gameOver(); else { S.frozen = false; deal(); }
     };
-    const vTimer = setTimeout(go, dead ? 1500 : 1700);
+    const vTimer = setTimeout(go, dead ? 1500 : 1800);
     setTimeout(() => el.verdict.addEventListener('pointerdown', go, { once: true }), 320);
   }
-
-  const BAD_NOTES_REAL = [
-    'She is telling everyone.',
-    'She had the receipts.',
-    'That one is going in a review.',
-    'You had ONE name to learn.'
-  ];
-  const BAD_NOTES_FAKE = [
-    'That is not how she spells it. Look.',
-    'Off by that much. Straight past you.',
-    'They are already at the bar. Well done.',
-    'The list said one thing. One.'
-  ];
 
   /* ---------- game over ---------- */
   function rankFor(score) {
@@ -389,12 +420,12 @@
     el.oNew.classList.toggle('on', isNew);
 
     const rows = [
+      ['Reached', 'Level ' + S.level],
+      ['Names on the list', S.list.length],
       ['Guests judged', S.seen],
-      ['Let in', S.admitted],
-      ['Bounced', S.bounced],
       ['Best streak', '×' + S.bestCombo],
       ['Impostors who got past you', S.impostorsLetIn],
-      ['Real Sofia Bennetts turned away', S.realTurnedAway],
+      ['Listed guests you turned away', S.realTurnedAway],
       ['Personal best', save.best.toLocaleString()]
     ];
     el.oStats.innerHTML = rows.map((row) =>
@@ -411,32 +442,34 @@
       running: true, frozen: false, locked: false,
       score: 0, combo: 0, bestCombo: 0, strikes: 0, seen: 0,
       admitted: 0, bounced: 0, realTurnedAway: 0, impostorsLetIn: 0,
-      wave: 1, lastName: ''
+      level: 1, list: [C.FIRST_NAME],
+      familyQueue: shuffle(C.FAMILY_POOL), wildQueue: shuffle(C.WILD_POOL),
+      lastTag: '', pausedLeft: null
     });
-    recentNames.length = 0;
+    recentTags.length = 0;
     recentFaces.length = 0;
     renderHud();
+    renderList(null);
     el.verdict.classList.remove('on');
     show(el.game);
-    banner('SHIFT START', 'one name. one spelling.');
+    banner('SHIFT START', 'one name. for now.');
     setTimeout(deal, REDUCED ? 200 : 620);
   }
 
-  /* ---------- input: buttons ---------- */
+  /* ---------- input ---------- */
   el.btnIn.addEventListener('click', () => decide(true));
   el.btnOut.addEventListener('click', () => decide(false));
 
   document.addEventListener('keydown', (e) => {
     if (el.game.classList.contains('on')) {
       if (e.key === 'ArrowRight') { e.preventDefault(); decide(true); }
-      if (e.key === 'ArrowLeft')  { e.preventDefault(); decide(false); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); decide(false); }
     } else if (e.key === 'Enter' || e.key === ' ') {
       if (el.title.classList.contains('on')) { e.preventDefault(); startGame(); }
       else if (el.over.classList.contains('on')) { e.preventDefault(); startGame(); }
     }
   });
 
-  /* ---------- input: swipe the guest ---------- */
   let drag = null;
   el.card.addEventListener('pointerdown', (e) => {
     if (!S.running || S.locked || S.frozen) return;
@@ -503,11 +536,10 @@
 
   function refreshTitle() {
     el.bestTitle.innerHTML = save.best > 0
-      ? 'BEST <b>' + save.best.toLocaleString() + '</b> · STREAK <b>×' + save.bestStreak + '</b>'
+      ? 'BEST <b>' + save.best.toLocaleString() + '</b> · LEVEL <b>' + save.bestLevel + '</b>'
       : 'no shifts worked yet';
   }
 
-  /* ---------- pause when backgrounded ---------- */
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && S.running && !S.frozen) {
       S.frozen = true;
@@ -525,8 +557,7 @@
   SFX.setMuted(save.muted);
   renderMute();
   refreshTitle();
-  $('true-name').textContent = TRUE_NAME;
-  document.querySelectorAll('.js-truename').forEach((n) => { n.textContent = TRUE_NAME; });
+  document.querySelectorAll('.js-firstname').forEach((n) => { n.textContent = C.FIRST_NAME; });
   show(el.title);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
